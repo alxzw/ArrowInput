@@ -1,116 +1,167 @@
 # ArrowInput
 
-ArrowInput is an x64-only Windows TSF input method project.
+ArrowInput 是一个面向 Windows 的中文输入法实验项目，基于 TSF（Text Services Framework）实现，目前只支持 x64。
 
-The current goal is to keep the TSF/UI shell usable while the input algorithm is
-developed and tested independently.
+项目现阶段的重点是把 TSF 外壳、候选窗、配置、词库和算法测试链路跑通，让输入算法可以独立迭代、独立验证。
 
-## Current Status
+## 当前状态
 
-- Builds a x64 COM DLL: `build\x64\Debug\ArrowInputTextService.dll`
-- Deploys test artifacts to `D:\MyApp\ArrowInput`
-- Reads runtime config from `%APPDATA%\ArrowInput\config.ini`
-- Uses TSF key sinks and focus sinks
-- Supports preedit display, candidate window, paging, mouse selection, and
-  focus-loss cleanup
-- Supports Chinese/English mode, full/half shape mode, Chinese punctuation, and
-  shortcut pass-through for Ctrl/Alt combinations
-- Has an algorithm boundary:
+- 生成 x64 COM DLL：`build\x64\Debug\ArrowInputTextService.dll`
+- 默认部署测试文件到：`D:\MyApp\ArrowInput`
+- 运行时读取配置：`%APPDATA%\ArrowInput\config.ini`
+- 已接入 TSF key sink、focus sink
+- 支持预编辑文本、候选窗、翻页、鼠标选择、失焦清理
+- 支持中英文模式、全角/半角、中文标点、Ctrl/Alt 快捷键透传
+- 候选查询已经抽出算法边界：
   - `IInputAlgorithm::QueryCandidates(code)`
-  - candidate source selection through `dictionary_type`
-  - TSV dictionary loading through `dictionary_path`
-  - standalone `AlgorithmProbe.exe` for algorithm testing
+  - 通过 `dictionary_type` 选择候选源
+  - 通过 `dictionary_path` 加载 TSV 或 SQLite 词库
+  - 通过独立的 `AlgorithmProbe.exe` 测试算法
 
-## Build
+## 构建
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Configuration Debug
 ```
 
-## Deploy
+## 部署
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Configuration Debug
 ```
 
-The default test install directory is:
+默认测试部署目录：
 
 ```text
 D:\MyApp\ArrowInput
 ```
 
-If the DLL is loaded, deployment writes:
+如果 DLL 正被系统或应用加载，部署脚本会写入：
 
 ```text
 D:\MyApp\ArrowInput\ArrowInputTextService.dll.pending
 ```
 
-Sign out or otherwise unload the DLL, then replace the live DLL with the pending
-one.
+退出登录，或用其他方式卸载当前 DLL 后，再应用 pending 文件。
 
-## Install
+## 安装
 
-TSF profile registration requires elevation. Run PowerShell as Administrator:
+TSF profile 注册需要管理员权限。请以管理员身份运行 PowerShell：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Configuration Debug
 ```
 
-## Uninstall
+## 卸载
 
-Run PowerShell as Administrator:
+同样需要管理员权限：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -Configuration Debug
 ```
 
-Unregistering a TSF profile does not force processes that already loaded the
-DLL to unload it. To find or stop processes that still lock the deployed DLL:
+注销 TSF profile 不会强制已经加载 DLL 的进程立刻卸载它。可以检查或停止仍占用部署 DLL 的进程：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\release_loaded_binaries.ps1
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\release_loaded_binaries.ps1 -StopLockingProcesses
 ```
 
-You can also ask uninstall to do that after unregistering:
+也可以在卸载时一并尝试停止占用进程：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\uninstall.ps1 -StopLockingProcesses
 ```
 
-## Algorithm Probe
+## 算法探针
 
-Build the standalone algorithm probe:
+构建独立算法测试程序：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build_algorithm_probe.ps1 -Configuration Debug
 ```
 
-Run one-shot queries:
+执行一次性查询：
 
 ```powershell
 .\build\tools\AlgorithmProbe\x64\Debug\AlgorithmProbe.exe --type tsv --dict tools\AlgorithmProbe\sample_dictionary.tsv ni hao
 ```
 
-Limit returned candidates for lookup experiments:
+限制返回候选数量：
 
 ```powershell
 .\build\tools\AlgorithmProbe\x64\Debug\AlgorithmProbe.exe --type sqlite --dict D:\MyApp\ArrowInput\experiments\rime_luna.db --limit 20 yi nih
 ```
 
-Query the dictionary currently selected by `%APPDATA%\ArrowInput\config.ini`:
+查询当前用户配置中选中的词库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\probe_current_dictionary.ps1 -Limit 10 yi nih
 ```
 
-Run a fuller health check for the currently selected dictionary:
+对当前词库做健康检查：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\check_current_dictionary.ps1 -Limit 5 ni nih yi zhongguo
 ```
 
-Manage user words in a SQLite dictionary:
+交互式查询：
+
+```powershell
+.\build\tools\AlgorithmProbe\x64\Debug\AlgorithmProbe.exe --dict tools\AlgorithmProbe\sample_dictionary.tsv --interactive
+```
+
+打印候选源统计：
+
+```powershell
+.\build\tools\AlgorithmProbe\x64\Debug\AlgorithmProbe.exe --type tsv --dict tools\AlgorithmProbe\sample_dictionary.tsv --stats
+```
+
+## 词库格式
+
+目前实现了两种候选源：
+
+- `dictionary_type=tsv`
+- `dictionary_type=sqlite`
+
+其他值会返回 `unsupported source type`。SQLite schema 见 `docs\sqlite_dictionary_schema.md`。
+
+TSV 词库格式：
+
+```text
+code<Tab>text<Tab>comment<Tab>weight<Tab>user_weight
+```
+
+说明：
+
+- 文件使用 UTF-8
+- `#` 开头的行会被忽略
+- `comment`、`weight`、`user_weight` 可选
+- 候选排序按 `weight DESC`、`user_weight DESC`、文件顺序
+
+运行时会通过 `config.ini` 里的 `max_candidates_per_query` 限制候选数量，默认值为 30。开启 `prefix_candidates=1` 后，输入 `nih` 时也可以匹配 `nihao` 这类以当前编码开头的候选。
+
+连续拼音会先解析再查询。例如 `shurufa` 也可以查询词库中编码为 `shu ru fa` 的行。
+
+短拼也会作为回退候选参与查询。例如：
+
+- `zg` 可以匹配 `zhong guo`
+- `srf` 可以匹配 `shu ru fa`
+- `zguo`、`zhg` 可以匹配 `zhong guo`
+- `srfa`、`shrf` 可以匹配 `shu ru fa`
+
+可选的模糊音可以通过 `fuzzy_pinyin=1` 开启，支持 `z/zh`、`c/ch`、`s/sh`、`an/ang`、`en/eng`、`in/ing` 等常见组合。
+
+## 用户词和学习
+
+SQLite 词库包含 `user_entries` 表，用于自动学习和手动用户词。选择候选后，ArrowInput 会给该候选增加用户权重，让常用词逐渐排到前面。学习事件也会被记录，因此最近一次自动学习可以撤销：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db learning-history
+powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db undo-learning
+```
+
+添加、列出、导出、导入用户词：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db add --code ceshi --text 测试 --comment "ce shi" --user-weight 5000
@@ -120,7 +171,7 @@ powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_diction
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db import --input D:\MyApp\ArrowInput\experiments\user_entries.tsv
 ```
 
-For the currently configured SQLite dictionary, the shorter wrapper can be used:
+如果当前配置已经指向 SQLite 词库，可以使用短包装脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_current_user_dictionary.ps1 user-stats
@@ -128,153 +179,88 @@ powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_current_user
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_current_user_dictionary.ps1 undo-learning
 ```
 
-Run interactive queries:
-
-```powershell
-.\build\tools\AlgorithmProbe\x64\Debug\AlgorithmProbe.exe --dict tools\AlgorithmProbe\sample_dictionary.tsv --interactive
-```
-
-Print source statistics:
-
-```powershell
-.\build\tools\AlgorithmProbe\x64\Debug\AlgorithmProbe.exe --type tsv --dict tools\AlgorithmProbe\sample_dictionary.tsv --stats
-```
-
-`dictionary_type=tsv` and `dictionary_type=sqlite` are implemented. Other
-values report `unsupported source type`.
-
-The SQLite schema is documented in
-`docs\sqlite_dictionary_schema.md`.
-
-TSV dictionary format:
-
-```text
-code<Tab>text<Tab>comment<Tab>weight<Tab>user_weight
-```
-
-The dictionary is UTF-8. Lines starting with `#` are ignored. `comment`,
-`weight`, and `user_weight` are optional. Candidates are ordered by
-`weight DESC`, then `user_weight DESC`, then file order.
-
-Runtime candidate lookup is capped by `max_candidates_per_query` in
-`config.ini` to keep large dictionaries responsive. The default is 30.
-When `prefix_candidates=1`, ArrowInput also shows candidates whose full code
-starts with the current composition, such as `nihao` while the composition is
-`nih`. Runtime lookup first returns exact-code candidates, then fills any
-remaining slots with longer prefix matches.
-
-Continuous pinyin is parsed before lookup. For example, `shurufa` can also
-query dictionary rows stored as `shu ru fa`.
-
-Short pinyin acronyms are also queried as fallback candidates. For example,
-`zg` can match `zhong guo`, and `srf` can match `shu ru fa`.
-Mixed prefix input is supported too, such as `zguo` or `zhg` for `zhong guo`
-and `srfa` or `shrf` for `shu ru fa`.
-Optional fuzzy pinyin can be enabled with `fuzzy_pinyin=1`; it expands common
-pairs such as `z/zh`, `c/ch`, `s/sh`, `an/ang`, `en/eng`, and `in/ing`.
-
-SQLite dictionaries include a `user_entries` table for learning and manual user
-words. Selecting a candidate records a user weight boost, so repeated choices
-rise ahead of unselected candidates with the same code. Learning events are
-also recorded, which makes the latest automatic boost reversible:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db learning-history
-powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db undo-learning
-```
-
-Wrong or unwanted words can be hidden with a user tombstone:
+不想看到的候选可以用用户 tombstone 隐藏；输入过程中也可以按 `Shift+Delete` 隐藏当前高亮候选并刷新候选窗。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db delete --code ni --text 你
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db deleted
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db undo-delete
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\manage_user_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db restore --code ni --text 你
-D:\MyApp\ArrowInput\AlgorithmProbe.exe --type sqlite --dict D:\MyApp\ArrowInput\experiments\rime_luna.db --limit 5 --delete ni 1
 ```
 
-During composition, `Shift+Delete` hides the currently highlighted candidate
-and refreshes the candidate window.
+## 词库工具
 
-Validate a TSV dictionary before importing or deploying it:
+验证 TSV 词库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate_tsv_dictionary.ps1 -InputPath data\seed_pinyin.tsv
 ```
 
-Validation rejects duplicate `code+text` rows, invalid integer weights, extra
-fields, leading/trailing whitespace, malformed codes, overlong fields, and
-weights outside the configured range. Codes currently allow lowercase ASCII
-letters and apostrophes. The default limits are intentionally broad for
-experiments and can be adjusted with `-MaxCodeLength`, `-MaxTextLength`,
-`-MaxCommentLength`, `-MinWeight`, `-MaxWeight`, `-MinUserWeight`, and
-`-MaxUserWeight`.
+验证会拒绝重复的 `code+text` 行、非法整数权重、多余字段、首尾空白、非法编码、过长字段，以及超出范围的权重。编码目前允许小写 ASCII 字母和撇号。
 
-Convert a simple external text dictionary to ArrowInput TSV:
+把外部文本词库转换为 ArrowInput TSV：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\convert_text_dictionary_to_tsv.ps1 -InputPath D:\path\to\source.txt -OutputPath D:\path\to\converted.tsv
 ```
 
-By default the converter reads `code text comment weight user_weight` columns,
-split by tabs when present and otherwise by whitespace. Use `-Columns` when the
-external order differs, for example `-Columns text,code,weight`.
+默认读取 `code text comment weight user_weight` 列。存在 Tab 时按 Tab 分列，否则按空白分列。如果外部词库列顺序不同，可以使用 `-Columns`，例如：
 
-Rime `.dict.yaml` files can also be converted. Entries after the `...` marker
-are read as `text<Tab>code<Tab>weight`, and code spaces are removed for
-ArrowInput lookup while the original code is kept as the comment:
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\convert_text_dictionary_to_tsv.ps1 -InputPath D:\path\to\source.txt -OutputPath D:\path\to\converted.tsv -Columns text,code,weight
+```
+
+也支持转换 Rime `.dict.yaml`。`...` 标记之后的条目会按 `text<Tab>code<Tab>weight` 读取，编码中的空格会被移除以便 ArrowInput 查询，原始编码会保存在 comment 中：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\convert_text_dictionary_to_tsv.ps1 -InputPath D:\path\to\luna_pinyin.dict.yaml -OutputPath D:\path\to\rime_converted.tsv -SourceFormat rime
 ```
 
-Append one experimental TSV entry, validate the file, rebuild SQLite, and query
-the new code:
+新增一个实验 TSV 条目，并验证、重建 SQLite、查询新编码：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\add_tsv_entry.ps1 -DictionaryPath D:\MyApp\ArrowInput\seed_pinyin.tsv -Code ceshi -Text 测试 -Comment "ce shi" -Weight 1000 -DatabasePath D:\MyApp\ArrowInput\seed_pinyin.db
 ```
 
-Merge a batch TSV into the seed dictionary, skip duplicate `code+text` rows,
-validate, and rebuild SQLite:
+合并一批 TSV 到种子词库，跳过重复的 `code+text` 行，验证并重建 SQLite：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\merge_tsv_dictionary.ps1 -TargetPath D:\MyApp\ArrowInput\seed_pinyin.tsv -SourcePath D:\path\to\new_words.tsv -DatabasePath D:\MyApp\ArrowInput\seed_pinyin.db
 ```
 
-Preview a merge without modifying the target dictionary:
+预览合并，不修改目标词库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\preview_tsv_merge.ps1 -TargetPath D:\MyApp\ArrowInput\experiments\trial1.tsv -SourcePath D:\path\to\new_words.tsv
 ```
 
-Promote preferred candidates from one TSV, such as `seed_pinyin.tsv`, above
-other candidates with the same code:
+把某个 TSV 中的候选提升到同编码其他候选之前：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\promote_tsv_candidates.ps1 -TargetPath D:\MyApp\ArrowInput\experiments\trial1.tsv -SourcePath D:\MyApp\ArrowInput\seed_pinyin.tsv
 ```
 
-Create an isolated experiment dictionary from the seed dictionary and switch to
-it immediately:
+## 实验词库
+
+从种子词库创建一个隔离的实验词库，并立刻切换到它：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\new_experiment_dictionary.ps1 -Name trial1 -UseNow
 ```
 
-Switch to an existing experiment by name:
+切换到已有实验：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\use_experiment_dictionary.ps1 -Name trial1
 ```
 
-After editing an experiment TSV, validate and rebuild its SQLite DB:
+编辑实验 TSV 后，验证并重建 SQLite：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\rebuild_experiment_dictionary.ps1 -Name trial1 -UseNow
 ```
 
-Backup and restore an experiment dictionary:
+备份、查看备份、恢复实验词库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\backup_experiment_dictionary.ps1 -Name trial1
@@ -282,153 +268,142 @@ powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\list_experiment_bac
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\restore_experiment_dictionary.ps1 -Name trial1 -UseNow
 ```
 
-Import an external text dictionary into an experiment. This converts the source
-when needed, validates it, previews the merge, backs up the experiment, merges,
-rebuilds SQLite, and optionally switches to the rebuilt DB:
+导入外部词库到实验词库。脚本会按需转换源文件、验证、预览合并、备份实验、合并、重建 SQLite，并可选择切换到新 DB：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\import_external_dictionary_to_experiment.ps1 -Name trial1 -SourcePath D:\path\to\source.txt -Delimiter space -UseNow
 ```
 
-Add `-PreviewOnly` to stop after validation and merge preview. Use
-`-SourceFormat rime` to import a Rime dictionary directly. Add
-`-CreateIfMissing` to create the experiment from `seed_pinyin.tsv` before
-importing when it does not exist yet. Add `-PromoteSourceTsv` to lift preferred
-entries, such as seed candidates, above imported candidates with the same code:
+常用参数：
+
+- `-PreviewOnly`：只验证和预览合并，不修改实验词库
+- `-SourceFormat rime`：直接导入 Rime 词库
+- `-CreateIfMissing`：实验不存在时先从 `seed_pinyin.tsv` 创建
+- `-PromoteSourceTsv`：把指定 TSV 中的候选提升到同编码导入候选之前
+
+示例：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\import_external_dictionary_to_experiment.ps1 -Name trial1 -SourcePath D:\path\to\luna_pinyin.dict.yaml -SourceFormat rime -CreateIfMissing -PromoteSourceTsv D:\MyApp\ArrowInput\seed_pinyin.tsv -UseNow
 ```
 
-## Tests
+## 测试
 
-Run all current checks:
+运行当前所有检查：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\test_all.ps1 -Configuration Debug
 ```
 
-Run only the algorithm probe regression test:
+只运行算法探针回归测试：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\test_algorithm_probe.ps1 -Configuration Debug
 ```
 
-Build a draft SQLite dictionary from TSV:
+构建一个 SQLite 词库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\import_tsv_to_sqlite.ps1 -InputPath tools\AlgorithmProbe\sample_dictionary.tsv -OutputPath build\tools\AlgorithmProbe\sample_dictionary.db
 ```
 
-`deploy.ps1` also regenerates the deployed sample SQLite dictionary from the
-sample TSV before copying it to `D:\MyApp\ArrowInput`. If `AlgorithmProbe.exe`
-has been built, it is also copied to the deploy root and can use the deployed
-`sqlite3.dll` directly:
-
-```powershell
-D:\MyApp\ArrowInput\AlgorithmProbe.exe --type sqlite --dict D:\MyApp\ArrowInput\experiments\rime_luna.db --limit 20 yi nih
-```
-
-Run the SQLite import smoke test:
+运行 SQLite 导入冒烟测试：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\test_sqlite_import.ps1
 ```
 
-Query a generated SQLite dictionary:
+查询生成的 SQLite 词库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\query_sqlite_dictionary.ps1 -DatabasePath build\tools\AlgorithmProbe\sample_dictionary.db ni hao
 ```
 
-Inspect SQLite dictionary statistics and the top ranked candidates for a code:
+查看 SQLite 词库统计，以及某个编码下排名靠前的候选：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\inspect_sqlite_dictionary.ps1 -DatabasePath build\tools\AlgorithmProbe\sample_dictionary.db -Limit 5 -Metadata ni hao
 ```
 
-Inspect prefix lookup as the running input method sees it:
+检查运行时看到的前缀查询：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\inspect_sqlite_dictionary.ps1 -DatabasePath build\tools\AlgorithmProbe\sample_dictionary.db -Prefix -Limit 5 nih
 ```
 
-Benchmark exact or prefix lookup latency:
+测试精确查询或前缀查询延迟：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\benchmark_sqlite_dictionary.ps1 -DatabasePath build\tools\AlgorithmProbe\sample_dictionary.db -Limit 30 -Iterations 100 ni shi yi
 powershell -ExecutionPolicy Bypass -File .\scripts\benchmark_sqlite_dictionary.ps1 -DatabasePath build\tools\AlgorithmProbe\sample_dictionary.db -Prefix -Limit 30 -Iterations 100 nih niha
 ```
 
-Add `-Explain` to include SQLite query plans and confirm index usage:
+加上 `-Explain` 可以输出 SQLite 查询计划，用来确认索引是否生效：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\benchmark_sqlite_dictionary.ps1 -DatabasePath build\tools\AlgorithmProbe\sample_dictionary.db -Prefix -Explain nih
 ```
 
-Find high-conflict codes with many candidates:
+查找候选冲突较多的编码：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\inspect_sqlite_dictionary.ps1 -DatabasePath build\tools\AlgorithmProbe\sample_dictionary.db -TopCodes 20
 ```
 
-Query the deployed sample SQLite dictionary:
+## 运行时配置
 
-```powershell
-powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\query_sqlite.ps1 ni hao
-```
-
-Inspect the current Rime experiment dictionary:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\inspect_sqlite_dictionary.ps1 -DatabasePath D:\MyApp\ArrowInput\experiments\rime_luna.db -Limit 10 ni nihao zhongguo
-```
-
-An experimental seed dictionary is also deployed as `seed_pinyin.tsv` and
-`seed_pinyin.db`. Query it with:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\query_sqlite.ps1 nihao shurufa -DatabasePath D:\MyApp\ArrowInput\seed_pinyin.db
-```
-
-Use the generated database from ArrowInput by setting:
+使用生成的 SQLite 词库：
 
 ```ini
 dictionary_type=sqlite
 dictionary_path=build\tools\AlgorithmProbe\sample_dictionary.db
 ```
 
-For the deployed test copy, switch the runtime user config with:
+对部署目录中的测试副本，可以切换当前用户配置：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\set_dictionary.ps1 -Type sqlite
 ```
 
-To test the experimental seed database instead of the tiny sample database:
+测试实验种子词库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\set_dictionary.ps1 -Type sqlite -Path D:\MyApp\ArrowInput\seed_pinyin.db
 ```
 
-Switch back to TSV with:
+切回 TSV：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\set_dictionary.ps1 -Type tsv
 ```
 
-`set_dictionary.ps1` verifies the target dictionary path by default. For
-intentional broken-path testing, pass `-AllowMissing`.
+`set_dictionary.ps1` 默认会检查目标词库路径是否存在。若是故意测试坏路径，可以传入 `-AllowMissing`。
 
-Check the deployed files, pending binaries, current user config, and recent
-runtime log with:
+检查部署文件、pending 二进制、当前用户配置和最近运行日志：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\status.ps1
 ```
 
-After signing out or otherwise unloading ArrowInput, apply pending DLL updates
-with:
+退出登录或以其他方式卸载 ArrowInput 后，应用 pending DLL：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\MyApp\ArrowInput\apply_pending.ps1
 ```
+
+## 项目结构
+
+```text
+src/                  TSF 输入法主体代码
+scripts/              构建、部署、安装、词库和测试脚本
+tools/AlgorithmProbe/ 独立算法探针
+tools/DictionaryTools/词库处理工具
+tests/                回归测试数据
+data/                 种子词库和外部词库转换结果
+docs/                 设计和数据结构文档
+config/               默认配置
+```
+
+## 说明
+
+这是一个处于实验和开发阶段的输入法项目。安装和卸载会触碰 Windows TSF 注册信息，建议先在测试环境或熟悉的开发机上使用。
