@@ -1,0 +1,12 @@
+source type: tsv
+source status: loaded
+dictionary configured: yes
+dictionary loaded: yes
+data line count: 3
+skipped line count: 1
+invalid line count: 2
+code count: 1
+candidate count: 1
+issues:
+  line 3: invalid weight field
+  line 4: invalid user_weight field

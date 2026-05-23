@@ -1,0 +1,12 @@
+source type: tsv
+source status: loaded
+dictionary configured: yes
+dictionary loaded: yes
+data line count: 4
+skipped line count: 1
+invalid line count: 2
+code count: 2
+candidate count: 2
+issues:
+  line 3: expected non-empty code and text fields
+  line 4: expected non-empty code and text fields

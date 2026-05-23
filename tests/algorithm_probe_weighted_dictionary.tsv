@@ -1,0 +1,6 @@
+# weighted dictionary sample
+ni	low	low	1	0
+ni	high	high	10	0
+ni	user	high_user	10	5
+hao	stable	first	0	0
+hao	stable2	second	0	0

@@ -1,0 +1,8 @@
+[ni] 3 candidate(s)
+1. 你 ni
+2. 呢 ne
+3. 尼 ni
+[hao] 2 candidate(s)
+1. 好 hao
+2. 号 hao
+[abc] 0 candidate(s)

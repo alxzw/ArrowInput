@@ -1,0 +1,9 @@
+# invalid validation sample
+ni	ok	ok	1	0
+ni	ok	duplicate	1	0
+bad_weight	text	comment	x	0
+extra	text	comment	1	0	unused
+ space	text	comment	1	0
+BadCode	text	comment	1	0
+toolongcode	text	comment	1	0
+hugeweight	text	comment	1000000001	0

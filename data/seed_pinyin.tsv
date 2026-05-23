@@ -1,0 +1,118 @@
+# ArrowInput experimental seed dictionary
+# UTF-8 TSV: code	text	comment	weight	user_weight
+ni	你	ni	1000	0
+ni	呢	ne	300	0
+ni	尼	ni	120	0
+hao	好	hao	1000	0
+hao	号	hao	350	0
+hao	毫	hao	80	0
+nihao	你好	ni hao	2000	0
+wo	我	wo	1000	0
+wo	握	wo	120	0
+wo	窝	wo	80	0
+shi	是	shi	1000	0
+shi	时	shi	700	0
+shi	事	shi	650	0
+shi	十	shi	450	0
+shi	使	shi	220	0
+de	的	de	1200	0
+de	得	de	700	0
+de	地	de	650	0
+le	了	le	1000	0
+le	乐	le	180	0
+zai	在	zai	1000	0
+zai	再	zai	650	0
+zai	载	zai	160	0
+you	有	you	1000	0
+you	又	you	600	0
+you	由	you	300	0
+you	友	you	260	0
+bu	不	bu	1000	0
+bu	部	bu	420	0
+bu	步	bu	300	0
+yi	一	yi	1000	0
+yi	以	yi	700	0
+yi	已	yi	500	0
+yi	意	yi	420	0
+ge	个	ge	1000	0
+ge	各	ge	420	0
+ge	格	ge	260	0
+ren	人	ren	1000	0
+ren	任	ren	320	0
+ren	认	ren	260	0
+men	们	men	900	0
+ma	吗	ma	900	0
+ma	妈	ma	500	0
+ma	马	ma	420	0
+me	么	me	900	0
+shen	什	shen	550	0
+shenme	什么	shen me	1800	0
+women	我们	wo men	1800	0
+nimen	你们	ni men	1500	0
+tamen	他们	ta men	1500	0
+ta	他	ta	1000	0
+ta	她	ta	900	0
+ta	它	ta	600	0
+zhong	中	zhong	1000	0
+zhong	种	zhong	420	0
+guo	国	guo	1000	0
+guo	过	guo	650	0
+guo	果	guo	420	0
+zhongguo	中国	zhong guo	2000	0
+renmin	人民	ren min	1400	0
+gongzuo	工作	gong zuo	1400	0
+gong	工	gong	650	0
+zuo	作	zuo	650	0
+zuo	做	zuo	620	0
+xue	学	xue	900	0
+xuexi	学习	xue xi	1400	0
+xi	习	xi	420	0
+xi	西	xi	260	0
+kan	看	kan	900	0
+kanjian	看见	kan jian	1100	0
+jian	见	jian	850	0
+jian	件	jian	500	0
+xiang	想	xiang	900	0
+xiang	向	xiang	560	0
+yao	要	yao	1000	0
+yao	药	yao	420	0
+keyi	可以	ke yi	1500	0
+ke	可	ke	800	0
+ke	课	ke	350	0
+mei	没	mei	900	0
+mei	每	mei	700	0
+meiyou	没有	mei you	1600	0
+hen	很	hen	900	0
+duo	多	duo	850	0
+sha	啥	sha	500	0
+duoshao	多少	duo shao	1300	0
+shao	少	shao	700	0
+da	大	da	900	0
+xiao	小	xiao	900	0
+jin	今	jin	600	0
+tian	天	tian	900	0
+jintian	今天	jin tian	1600	0
+mingtian	明天	ming tian	1500	0
+zuotian	昨天	zuo tian	1400	0
+ming	明	ming	700	0
+zuo	昨	zuo	300	0
+shijian	时间	shi jian	1500	0
+difang	地方	di fang	1300	0
+di	地	di	650	0
+fang	方	fang	650	0
+wen	问	wen	900	0
+wenti	问题	wen ti	1500	0
+ti	题	ti	700	0
+shouji	手机	shou ji	1200	0
+shou	手	shou	700	0
+ji	机	ji	700	0
+diannao	电脑	dian nao	1200	0
+dian	电	dian	700	0
+nao	脑	nao	600	0
+shuru	输入	shu ru	1200	0
+shu	输	shu	500	0
+ru	入	ru	500	0
+shurufa	输入法	shu ru fa	1500	0
+fa	法	fa	800	0
+jiantou	箭头	jian tou	1200	0
+tou	头	tou	600	0

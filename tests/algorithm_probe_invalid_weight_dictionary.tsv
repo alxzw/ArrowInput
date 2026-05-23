@@ -1,0 +1,4 @@
+# invalid weighted dictionary sample
+ni	ok	ok	1	0
+ni	bad_weight	bad	not_number	0
+ni	bad_user_weight	bad	1	not_number

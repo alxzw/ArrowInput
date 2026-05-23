@@ -1,0 +1,13 @@
+source type: sqlite
+source status: loaded
+dictionary configured: yes
+dictionary loaded: yes
+data line count: 0
+skipped line count: 0
+invalid line count: 0
+code count: 2
+candidate count: 5
+[ni] 3 candidate(s)
+1. user high_user
+2. high high
+3. low low

@@ -1,0 +1,10 @@
+source type: tsv
+source status: not loaded
+dictionary configured: yes
+dictionary loaded: no
+data line count: 0
+skipped line count: 0
+invalid line count: 0
+code count: 0
+candidate count: 0
+[ni] 0 candidate(s)
