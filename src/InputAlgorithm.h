@@ -28,9 +28,12 @@ public:
 
 private:
     std::vector<Candidate> QueryDemoCandidates(const std::wstring& code) const;
+    void ClearCandidateCache();
 
     Config config_;
     std::unique_ptr<ICandidateSource> source_;
+    std::wstring cached_code_;
+    std::vector<Candidate> cached_candidates_;
 };
 
 }  // namespace arrowinput

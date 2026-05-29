@@ -51,6 +51,7 @@ private:
     void HighlightCandidateFromWindow(size_t index);
     void CancelComposition(ITfContext* context, const wchar_t* success_log, const wchar_t* failure_log);
     void CancelCompositionForShortcut(ITfContext* context);
+    bool ExitToSystemInputMethod();
     void ReloadConfigIfChanged();
     void LogDictionaryStats(const wchar_t* prefix);
     bool ReadConfigWriteTime(FILETIME* write_time) const;
@@ -61,7 +62,9 @@ private:
     static void CandidateHoverThunk(void* context, size_t index);
     bool ShouldEatKey(WPARAM key) const;
     bool ControlOrAltDown() const;
+    bool ShiftKey(WPARAM key) const;
     bool ToggleInputModeKey(WPARAM key) const;
+    bool ExitInputMethodKey(WPARAM key) const;
     bool ToggleFullShapeKey(WPARAM key) const;
     std::wstring ChinesePunctuationForKey(WPARAM key) const;
     void AdvanceChinesePunctuationState(WPARAM key);

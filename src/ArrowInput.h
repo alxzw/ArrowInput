@@ -40,6 +40,18 @@ inline constexpr GUID kFullShapeLeftShiftPreservedKeyGuid =
 inline constexpr GUID kFullShapeRightShiftPreservedKeyGuid =
     {0xe2b87c9c, 0x4a5e, 0x4710, {0x84, 0x2b, 0xf6, 0xc6, 0x3a, 0xfd, 0x14, 0x7e}};
 
+// {C7FC4B7C-2970-46E5-9403-9F0C8A6ACF1B}
+inline constexpr GUID kInputModePreservedKeyGuid =
+    {0xc7fc4b7c, 0x2970, 0x46e5, {0x94, 0x03, 0x9f, 0x0c, 0x8a, 0x6a, 0xcf, 0x1b}};
+
+// {4CA6F67A-8D12-4D55-AC00-E5DA84B77827}
+inline constexpr GUID kInputModePeriodPreservedKeyGuid =
+    {0x4ca6f67a, 0x8d12, 0x4d55, {0xac, 0x00, 0xe5, 0xda, 0x84, 0xb7, 0x78, 0x27}};
+
+// {5FBD6433-9D32-4E99-AC02-6628F6043DAA}
+inline constexpr GUID kExitInputMethodPreservedKeyGuid =
+    {0x5fbd6433, 0x9d32, 0x4e99, {0xac, 0x02, 0x66, 0x28, 0xf6, 0x04, 0x3d, 0xaa}};
+
 inline constexpr wchar_t kTextServiceDescription[] = L"ArrowInput";
 inline constexpr wchar_t kConfigDirectoryName[] = L"ArrowInput";
 inline constexpr wchar_t kConfigFileName[] = L"config.ini";

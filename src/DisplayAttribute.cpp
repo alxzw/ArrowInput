@@ -232,7 +232,6 @@ ULONG DisplayAttributeProvider::Release()
 
 HRESULT DisplayAttributeProvider::EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** enum_info)
 {
-    DebugLog(L"display attribute provider: enum requested");
     return CreateDisplayAttributeEnumerator(enum_info);
 }
 
@@ -248,7 +247,6 @@ HRESULT DisplayAttributeProvider::GetDisplayAttributeInfo(REFGUID guid, ITfDispl
         return E_INVALIDARG;
     }
 
-    DebugLog(L"display attribute provider: info requested");
     auto* attribute_info = new (std::nothrow) DisplayAttributeInfo();
     if (!attribute_info) {
         return E_OUTOFMEMORY;

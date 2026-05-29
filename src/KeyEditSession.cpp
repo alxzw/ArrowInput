@@ -79,8 +79,6 @@ HRESULT ApplyPreeditDisplayAttribute(ITfContext* context, TfEditCookie edit_cook
     hr = property->SetValue(edit_cookie, range, &value);
     if (FAILED(hr)) {
         DebugLogHresult(L"SetValue display attribute failed", hr);
-    } else {
-        DebugLog(L"SetValue display attribute succeeded");
     }
 
     property->Release();
@@ -420,7 +418,9 @@ HRESULT KeyEditSession::DoEditSession(TfEditCookie edit_cookie)
         if (candidate_window_) {
             candidate_window_->Hide();
         }
-        DebugLog(SUCCEEDED(hr) ? L"edit session: direct text committed" : L"edit session: direct commit failed");
+        if (FAILED(hr)) {
+            DebugLog(L"edit session: direct commit failed");
+        }
         return hr;
     }
 
@@ -438,7 +438,9 @@ HRESULT KeyEditSession::DoEditSession(TfEditCookie edit_cookie)
         if (candidate_window_) {
             candidate_window_->Hide();
         }
-        DebugLog(SUCCEEDED(hr) ? L"edit session: committed text" : L"edit session: commit failed");
+        if (FAILED(hr)) {
+            DebugLog(L"edit session: commit failed");
+        }
         return hr;
     }
 
@@ -461,7 +463,9 @@ HRESULT KeyEditSession::DoEditSession(TfEditCookie edit_cookie)
                 result.total_candidates,
                 anchor);
         }
-        DebugLog(SUCCEEDED(hr) ? L"edit session: preedit updated" : L"edit session: preedit update failed");
+        if (FAILED(hr)) {
+            DebugLog(L"edit session: preedit update failed");
+        }
         return hr;
     }
 
@@ -476,11 +480,9 @@ HRESULT KeyEditSession::DoEditSession(TfEditCookie edit_cookie)
                 result.total_candidates,
                 anchor);
         }
-        DebugLog(L"edit session: candidates updated");
         return S_OK;
     }
 
-    DebugLog(L"edit session: no document change");
     return S_OK;
 }
 

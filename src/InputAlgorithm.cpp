@@ -80,6 +80,7 @@ DemoInputAlgorithm::DemoInputAlgorithm()
 void DemoInputAlgorithm::Reset(const Config& config)
 {
     config_ = config;
+    ClearCandidateCache();
     source_ = CreateCandidateSource(config_.dictionary_type);
     if (source_) {
         source_->Reset(config_.dictionary_path);
@@ -88,14 +89,21 @@ void DemoInputAlgorithm::Reset(const Config& config)
 
 std::vector<Candidate> DemoInputAlgorithm::QueryCandidates(const std::wstring& code)
 {
+    if (code == cached_code_) {
+        return cached_candidates_;
+    }
+
+    const DWORD started = GetTickCount();
+    std::vector<Candidate> result;
     if (source_) {
         source_->ReloadIfChanged();
         if (source_->IsAvailable()) {
             const size_t max_candidates = static_cast<size_t>(config_.max_candidates_per_query);
+            const bool prefix_candidates = config_.prefix_candidates && code.size() >= 2;
             std::vector<Candidate> candidates = source_->QueryCandidates(
                 code,
                 max_candidates,
-                config_.prefix_candidates);
+                prefix_candidates);
             PinyinParseResult parsed;
             bool parsed_checked = false;
             if (candidates.size() < max_candidates) {
@@ -105,7 +113,7 @@ std::vector<Candidate> DemoInputAlgorithm::QueryCandidates(const std::wstring& c
                     std::vector<Candidate> parsed_candidates = source_->QueryCandidates(
                         parsed.spaced_code,
                         max_candidates,
-                        config_.prefix_candidates);
+                        prefix_candidates);
                     for (Candidate& candidate : parsed_candidates) {
                         if (candidate.comment.empty()) {
                             candidate.comment = parsed.spaced_code;
@@ -122,12 +130,12 @@ std::vector<Candidate> DemoInputAlgorithm::QueryCandidates(const std::wstring& c
                         std::vector<Candidate> fuzzy_candidates = source_->QueryCandidates(
                             fuzzy_code,
                             max_candidates,
-                            config_.prefix_candidates);
+                            prefix_candidates);
                         const std::wstring compact_fuzzy_code = RemoveSpaces(fuzzy_code);
                         if (compact_fuzzy_code != fuzzy_code) {
                             AppendUniqueCandidates(
                                 &fuzzy_candidates,
-                                source_->QueryCandidates(compact_fuzzy_code, max_candidates, config_.prefix_candidates),
+                                source_->QueryCandidates(compact_fuzzy_code, max_candidates, prefix_candidates),
                                 max_candidates);
                         }
                         for (Candidate& candidate : fuzzy_candidates) {
@@ -143,7 +151,7 @@ std::vector<Candidate> DemoInputAlgorithm::QueryCandidates(const std::wstring& c
                 parsed = ParsePinyinCode(code);
                 parsed_checked = true;
             }
-            if (config_.prefix_candidates && !parsed.complete && candidates.size() < max_candidates && IsAsciiLowerCode(code) && code.size() >= 2 && code.size() <= 8) {
+            if (prefix_candidates && !parsed.complete && candidates.size() < max_candidates && IsAsciiLowerCode(code) && code.size() <= 8) {
                 const std::vector<std::vector<std::wstring>> patterns = BuildPinyinPrefixPatterns(code);
                 for (const std::vector<std::wstring>& prefixes : patterns) {
                     if (candidates.size() >= max_candidates) {
@@ -155,13 +163,32 @@ std::vector<Candidate> DemoInputAlgorithm::QueryCandidates(const std::wstring& c
                         max_candidates);
                 }
             }
-            return candidates;
+            result = std::move(candidates);
+            cached_code_ = code;
+            cached_candidates_ = result;
+            const DWORD elapsed = GetTickCount() - started;
+            if (elapsed >= 8) {
+                wchar_t line[160] = {};
+                StringCchPrintfW(
+                    line,
+                    ARRAYSIZE(line),
+                    L"candidate query slow: code=%s elapsed_ms=%lu count=%zu",
+                    code.c_str(),
+                    static_cast<unsigned long>(elapsed),
+                    result.size());
+                OutputDebugStringW(line);
+                OutputDebugStringW(L"\n");
+            }
+            return result;
         }
         if (source_->GetStats().configured) {
             return std::vector<Candidate>();
         }
     }
-    return QueryDemoCandidates(code);
+    result = QueryDemoCandidates(code);
+    cached_code_ = code;
+    cached_candidates_ = result;
+    return result;
 }
 
 DictionaryStats DemoInputAlgorithm::GetDictionaryStats()
@@ -176,6 +203,7 @@ DictionaryStats DemoInputAlgorithm::GetDictionaryStats()
 
 void DemoInputAlgorithm::RecordSelection(const std::wstring& code, const Candidate& candidate)
 {
+    ClearCandidateCache();
     if (!source_) {
         return;
     }
@@ -187,6 +215,7 @@ void DemoInputAlgorithm::RecordSelection(const std::wstring& code, const Candida
 
 void DemoInputAlgorithm::DeleteCandidate(const std::wstring& code, const Candidate& candidate)
 {
+    ClearCandidateCache();
     if (!source_) {
         return;
     }
@@ -209,6 +238,12 @@ std::vector<Candidate> DemoInputAlgorithm::QueryDemoCandidates(const std::wstrin
         candidates.push_back({L"ni", L"\x6CE5", L"ni"});
     }
     return candidates;
+}
+
+void DemoInputAlgorithm::ClearCandidateCache()
+{
+    cached_code_.clear();
+    cached_candidates_.clear();
 }
 
 }  // namespace arrowinput

@@ -861,6 +861,10 @@ void SqliteCandidateSource::Load()
         SourceLog(L"sqlite dictionary open failed");
         return;
     }
+    sqlite3_busy_timeout(database_, 1000);
+    sqlite3_exec(database_, "PRAGMA temp_store=MEMORY;", nullptr, nullptr, nullptr);
+    sqlite3_exec(database_, "PRAGMA cache_size=-32768;", nullptr, nullptr, nullptr);
+    sqlite3_exec(database_, "PRAGMA mmap_size=268435456;", nullptr, nullptr, nullptr);
 
     sqlite3_stmt* statement = nullptr;
     const char* migration_sql =

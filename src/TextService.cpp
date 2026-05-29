@@ -27,6 +27,17 @@ bool IsFullShapePreservedKeyGuid(REFGUID guid)
            IsEqualGUID(guid, kFullShapeRightShiftPreservedKeyGuid);
 }
 
+bool IsInputModePreservedKeyGuid(REFGUID guid)
+{
+    return IsEqualGUID(guid, kInputModePreservedKeyGuid) ||
+           IsEqualGUID(guid, kInputModePeriodPreservedKeyGuid);
+}
+
+bool IsExitInputMethodPreservedKeyGuid(REFGUID guid)
+{
+    return IsEqualGUID(guid, kExitInputMethodPreservedKeyGuid);
+}
+
 class FocusCleanupEditSession final : public ITfEditSession {
 public:
     FocusCleanupEditSession(ITfContext* context, ITfRange* range)
@@ -241,22 +252,53 @@ HRESULT TextService::OnTestKeyDown(ITfContext*, WPARAM wparam, LPARAM, BOOL* eat
         return E_POINTER;
     }
     ReloadConfigIfChanged();
-    *eaten = ShouldEatKey(wparam) ? TRUE : FALSE;
-    if (wparam == VK_SPACE || ToggleInputModeKey(wparam)) {
+    *eaten = (ToggleInputModeKey(wparam) || ExitInputMethodKey(wparam) || ShouldEatKey(wparam)) ? TRUE : FALSE;
+    if (config_.capture_keys && (wparam == VK_SPACE || ShiftKey(wparam))) {
         DebugLogKeyEvent(*eaten ? L"test key down eaten diagnostic" : L"test key down passed diagnostic", wparam);
     }
-    if (*eaten) {
+    if (config_.capture_keys && *eaten) {
         DebugLog(L"test key down eaten");
     }
     return S_OK;
 }
 
-HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM lparam, BOOL* eaten)
+HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM, BOOL* eaten)
 {
     if (!eaten) {
         return E_POINTER;
     }
     ReloadConfigIfChanged();
+
+    if (ExitInputMethodKey(wparam)) {
+        if (engine_.HasComposition()) {
+            CancelCompositionForShortcut(context);
+        }
+        shift_pending_toggle_ = false;
+        shift_combined_key_ = false;
+        suppress_space_keydown_ = false;
+        full_shape_hotkey_used_ = false;
+        *eaten = TRUE;
+        if (!ExitToSystemInputMethod()) {
+            DebugLog(L"exit input method hotkey failed");
+        }
+        return S_OK;
+    }
+
+    if (ToggleInputModeKey(wparam)) {
+        if (engine_.HasComposition()) {
+            CancelCompositionForShortcut(context);
+        }
+        shift_pending_toggle_ = false;
+        shift_combined_key_ = false;
+        suppress_space_keydown_ = false;
+        full_shape_hotkey_used_ = false;
+        chinese_mode_ = !chinese_mode_;
+        candidate_window_.Hide();
+        *eaten = TRUE;
+        DebugLog(chinese_mode_ ? L"input mode switched by ctrl+space: chinese" : L"input mode switched by ctrl+space: english");
+        ShowStatus(context);
+        return S_OK;
+    }
 
     if (ControlOrAltDown()) {
         if (engine_.HasComposition()) {
@@ -270,9 +312,8 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM lparam
         return S_OK;
     }
 
-    const bool shift_key = ToggleInputModeKey(wparam);
+    const bool shift_key = ShiftKey(wparam);
     const bool space_key = wparam == VK_SPACE;
-    const bool was_down = (lparam & (1 << 30)) != 0;
     if (shift_key) {
         shift_down_ = true;
     }
@@ -280,8 +321,10 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM lparam
         space_down_ = true;
     }
 
+    const bool shift_active = shift_down_ || (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    const bool space_active = space_down_ || (GetKeyState(VK_SPACE) & 0x8000) != 0;
     const bool full_shape_hotkey = !ControlOrAltDown() && !engine_.HasComposition() &&
-        ((space_key && shift_down_) || (shift_key && space_down_));
+        ((space_key && shift_active) || (shift_key && space_active));
     if (full_shape_hotkey) {
         *eaten = TRUE;
         shift_pending_toggle_ = false;
@@ -300,7 +343,7 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM lparam
     }
 
     *eaten = ShouldEatKey(wparam) ? TRUE : FALSE;
-    if (wparam == VK_SPACE || ToggleInputModeKey(wparam)) {
+    if (config_.capture_keys && (wparam == VK_SPACE || ShiftKey(wparam))) {
         DebugLogKeyEvent(*eaten ? L"key down eaten diagnostic" : L"key down passed diagnostic", wparam);
     }
 
@@ -316,12 +359,7 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM lparam
             DebugLog(L"key down eaten: shift tab as previous candidate");
         }
 
-        if (ToggleInputModeKey(wparam)) {
-            if (!was_down) {
-                shift_pending_toggle_ = true;
-                shift_combined_key_ = false;
-                full_shape_hotkey_used_ = false;
-            }
+        if (ShiftKey(wparam)) {
             return S_OK;
         }
 
@@ -443,7 +481,9 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM lparam
             return S_OK;
         }
 
-        DebugLog(L"key down eaten");
+        if (config_.capture_keys) {
+            DebugLog(L"key down eaten");
+        }
         shift_pending_toggle_ = false;
         shift_combined_key_ = false;
         suppress_space_keydown_ = false;
@@ -686,9 +726,12 @@ HRESULT TextService::OnTestKeyUp(ITfContext*, WPARAM wparam, LPARAM, BOOL* eaten
     if (!eaten) {
         return E_POINTER;
     }
-    *eaten = (ToggleInputModeKey(wparam) && shift_pending_toggle_) ||
-              (wparam == VK_SPACE && shift_down_) ? TRUE : FALSE;
-    if (wparam == VK_SPACE || ToggleInputModeKey(wparam)) {
+    const bool shift_active = shift_down_ || (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    *eaten = (ShiftKey(wparam) && shift_pending_toggle_) ||
+              (wparam == VK_SPACE && shift_active) ||
+              ToggleInputModeKey(wparam) ||
+              ExitInputMethodKey(wparam) ? TRUE : FALSE;
+    if (config_.capture_keys && (wparam == VK_SPACE || ShiftKey(wparam))) {
         DebugLogKeyEvent(*eaten ? L"test key up eaten diagnostic" : L"test key up passed diagnostic", wparam);
     }
     return S_OK;
@@ -699,11 +742,12 @@ HRESULT TextService::OnKeyUp(ITfContext* context, WPARAM wparam, LPARAM, BOOL* e
     if (!eaten) {
         return E_POINTER;
     }
-    const bool shift_key = ToggleInputModeKey(wparam);
+    const bool shift_key = ShiftKey(wparam);
     const bool space_key = wparam == VK_SPACE;
-    const bool full_shape_on_space_up = space_key && shift_down_ && !engine_.HasComposition() && !full_shape_hotkey_used_;
+    const bool shift_active = shift_down_ || (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    const bool full_shape_on_space_up = space_key && shift_active && !engine_.HasComposition() && !full_shape_hotkey_used_;
     *eaten = (shift_key && shift_pending_toggle_) || full_shape_on_space_up ? TRUE : FALSE;
-    if (wparam == VK_SPACE || ToggleInputModeKey(wparam)) {
+    if (config_.capture_keys && (wparam == VK_SPACE || ShiftKey(wparam))) {
         DebugLogKeyEvent(*eaten ? L"key up eaten diagnostic" : L"key up passed diagnostic", wparam);
     }
     if (full_shape_on_space_up) {
@@ -752,6 +796,80 @@ HRESULT TextService::OnKeyUp(ITfContext* context, WPARAM wparam, LPARAM, BOOL* e
     return S_OK;
 }
 
+bool TextService::ExitToSystemInputMethod()
+{
+    ITfInputProcessorProfiles* profiles = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_TF_InputProcessorProfiles,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&profiles));
+    if (FAILED(hr) || !profiles) {
+        DebugLogHresult(L"CoCreateInstance input profiles failed", hr);
+        return false;
+    }
+
+    LANGID langid = 0;
+    hr = profiles->GetCurrentLanguage(&langid);
+    profiles->Release();
+    if (FAILED(hr)) {
+        DebugLogHresult(L"GetCurrentLanguage failed", hr);
+        return false;
+    }
+
+    ITfInputProcessorProfileMgr* profile_mgr = nullptr;
+    hr = CoCreateInstance(
+        CLSID_TF_InputProcessorProfiles,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&profile_mgr));
+    if (FAILED(hr) || !profile_mgr) {
+        DebugLogHresult(L"CoCreateInstance profile manager failed", hr);
+        return false;
+    }
+
+    IEnumTfInputProcessorProfiles* enum_profiles = nullptr;
+    hr = profile_mgr->EnumProfiles(langid, &enum_profiles);
+    if (FAILED(hr) || !enum_profiles) {
+        profile_mgr->Release();
+        DebugLogHresult(L"EnumProfiles failed", hr);
+        return false;
+    }
+
+    TF_INPUTPROCESSORPROFILE profile = {};
+    ULONG fetched = 0;
+    HRESULT activate_hr = E_FAIL;
+    while (enum_profiles->Next(1, &profile, &fetched) == S_OK && fetched == 1) {
+        const bool is_arrowinput =
+            profile.dwProfileType == TF_PROFILETYPE_INPUTPROCESSOR &&
+            IsEqualGUID(profile.clsid, kClsidTextService) &&
+            IsEqualGUID(profile.guidProfile, kProfileGuid);
+        if (is_arrowinput) {
+            continue;
+        }
+
+        activate_hr = profile_mgr->ActivateProfile(
+            profile.dwProfileType,
+            profile.langid,
+            profile.clsid,
+            profile.guidProfile,
+            profile.hkl,
+            TF_IPPMF_FORPROCESS);
+        if (SUCCEEDED(activate_hr)) {
+            break;
+        }
+    }
+    enum_profiles->Release();
+    profile_mgr->Release();
+
+    if (FAILED(activate_hr)) {
+        DebugLogHresult(L"Activate alternate profile failed", activate_hr);
+        return false;
+    }
+    DebugLog(L"exit input method hotkey activated alternate profile");
+    return true;
+}
+
 HRESULT TextService::OnSetThreadFocus()
 {
     DebugLog(L"thread focus set");
@@ -772,12 +890,42 @@ HRESULT TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL* eat
     DebugLog(L"preserved key callback");
     if (IsFullShapePreservedKeyGuid(guid) && !engine_.HasComposition()) {
         shift_pending_toggle_ = false;
-        shift_combined_key_ = false;
+        shift_combined_key_ = true;
         suppress_space_keydown_ = false;
+        full_shape_hotkey_used_ = true;
         full_shape_ = !full_shape_;
         *eaten = TRUE;
         DebugLog(full_shape_ ? L"full shape switched by preserved key: on" : L"full shape switched by preserved key: off");
         ShowStatus(context);
+        return S_OK;
+    }
+    if (IsInputModePreservedKeyGuid(guid)) {
+        if (engine_.HasComposition()) {
+            CancelCompositionForShortcut(context);
+        }
+        shift_pending_toggle_ = false;
+        shift_combined_key_ = false;
+        suppress_space_keydown_ = false;
+        full_shape_hotkey_used_ = false;
+        chinese_mode_ = !chinese_mode_;
+        candidate_window_.Hide();
+        *eaten = TRUE;
+        DebugLog(chinese_mode_ ? L"input mode switched by preserved key: chinese" : L"input mode switched by preserved key: english");
+        ShowStatus(context);
+        return S_OK;
+    }
+    if (IsExitInputMethodPreservedKeyGuid(guid)) {
+        if (engine_.HasComposition()) {
+            CancelCompositionForShortcut(context);
+        }
+        shift_pending_toggle_ = false;
+        shift_combined_key_ = true;
+        suppress_space_keydown_ = false;
+        full_shape_hotkey_used_ = false;
+        *eaten = TRUE;
+        if (!ExitToSystemInputMethod()) {
+            DebugLog(L"exit input method preserved key failed");
+        }
         return S_OK;
     }
     *eaten = FALSE;
@@ -786,7 +934,6 @@ HRESULT TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL* eat
 
 HRESULT TextService::EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** enum_info)
 {
-    DebugLog(L"text service display attribute: enum requested");
     return CreateDisplayAttributeEnumerator(enum_info);
 }
 
@@ -802,7 +949,6 @@ HRESULT TextService::GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeIn
         return E_INVALIDARG;
     }
 
-    DebugLog(L"text service display attribute: info requested");
     auto* attribute_info = new (std::nothrow) DisplayAttributeInfo();
     if (!attribute_info) {
         return E_OUTOFMEMORY;
@@ -896,39 +1042,42 @@ HRESULT TextService::PreserveFullShapeKey(ITfKeystrokeMgr* keystroke_mgr)
         return S_OK;
     }
 
-    const wchar_t description[] = L"Toggle full shape";
     const struct {
         GUID guid;
         UINT modifier;
+        const wchar_t* description;
         const wchar_t* log_name;
     } keys[] = {
-        {kFullShapePreservedKeyGuid, TF_MOD_SHIFT, L"generic shift"},
-        {kFullShapeLeftShiftPreservedKeyGuid, TF_MOD_LSHIFT, L"left shift"},
-        {kFullShapeRightShiftPreservedKeyGuid, TF_MOD_RSHIFT, L"right shift"},
+        {kFullShapePreservedKeyGuid, TF_MOD_SHIFT, L"Toggle full shape", L"full shape generic shift"},
+        {kFullShapeLeftShiftPreservedKeyGuid, TF_MOD_LSHIFT, L"Toggle full shape", L"full shape left shift"},
+        {kFullShapeRightShiftPreservedKeyGuid, TF_MOD_RSHIFT, L"Toggle full shape", L"full shape right shift"},
+        {kInputModePreservedKeyGuid, TF_MOD_CONTROL, L"Toggle ArrowInput Chinese mode", L"input mode ctrl"},
+        {kInputModePeriodPreservedKeyGuid, TF_MOD_CONTROL, L"Toggle ArrowInput Chinese mode", L"input mode ctrl period"},
+        {kExitInputMethodPreservedKeyGuid, TF_MOD_CONTROL | TF_MOD_SHIFT, L"Exit ArrowInput", L"exit ctrl shift"},
     };
 
     bool any_succeeded = false;
     HRESULT last_hr = S_OK;
     for (const auto& key : keys) {
         TF_PRESERVEDKEY preserved_key = {};
-        preserved_key.uVKey = VK_SPACE;
+        preserved_key.uVKey = IsEqualGUID(key.guid, kInputModePeriodPreservedKeyGuid) ? VK_OEM_PERIOD : VK_SPACE;
         preserved_key.uModifiers = key.modifier;
 
         HRESULT hr = keystroke_mgr->PreserveKey(
             client_id_,
             key.guid,
             &preserved_key,
-            description,
-            ARRAYSIZE(description) - 1);
+            key.description,
+            static_cast<ULONG>(wcslen(key.description)));
         if (SUCCEEDED(hr)) {
             any_succeeded = true;
             wchar_t line[96] = {};
-            StringCchPrintfW(line, ARRAYSIZE(line), L"full shape preserved key registered: %s", key.log_name);
+            StringCchPrintfW(line, ARRAYSIZE(line), L"preserved key registered: %s", key.log_name);
             DebugLog(line);
         } else {
             last_hr = hr;
             wchar_t line[96] = {};
-            StringCchPrintfW(line, ARRAYSIZE(line), L"Preserve full shape key failed: %s", key.log_name);
+            StringCchPrintfW(line, ARRAYSIZE(line), L"Preserve key failed: %s", key.log_name);
             DebugLogHresult(line, hr);
         }
     }
@@ -953,11 +1102,14 @@ void TextService::UnpreserveFullShapeKey(ITfKeystrokeMgr* keystroke_mgr)
         {kFullShapePreservedKeyGuid, TF_MOD_SHIFT},
         {kFullShapeLeftShiftPreservedKeyGuid, TF_MOD_LSHIFT},
         {kFullShapeRightShiftPreservedKeyGuid, TF_MOD_RSHIFT},
+        {kInputModePreservedKeyGuid, TF_MOD_CONTROL},
+        {kInputModePeriodPreservedKeyGuid, TF_MOD_CONTROL},
+        {kExitInputMethodPreservedKeyGuid, TF_MOD_CONTROL | TF_MOD_SHIFT},
     };
 
     for (const auto& key : keys) {
         TF_PRESERVEDKEY preserved_key = {};
-        preserved_key.uVKey = VK_SPACE;
+        preserved_key.uVKey = IsEqualGUID(key.guid, kInputModePeriodPreservedKeyGuid) ? VK_OEM_PERIOD : VK_SPACE;
         preserved_key.uModifiers = key.modifier;
         HRESULT hr = keystroke_mgr->UnpreserveKey(key.guid, &preserved_key);
         if (FAILED(hr)) {
@@ -1088,9 +1240,35 @@ bool TextService::ControlOrAltDown() const
            (GetKeyState(VK_RMENU) & 0x8000) != 0;
 }
 
-bool TextService::ToggleInputModeKey(WPARAM key) const
+bool TextService::ShiftKey(WPARAM key) const
 {
     return key == VK_SHIFT || key == VK_LSHIFT || key == VK_RSHIFT;
+}
+
+bool TextService::ToggleInputModeKey(WPARAM key) const
+{
+    const bool ctrl =
+        (GetKeyState(VK_CONTROL) & 0x8000) != 0 ||
+        (GetKeyState(VK_LCONTROL) & 0x8000) != 0 ||
+        (GetKeyState(VK_RCONTROL) & 0x8000) != 0;
+    const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    const bool alt =
+        (GetKeyState(VK_MENU) & 0x8000) != 0 ||
+        (GetKeyState(VK_LMENU) & 0x8000) != 0 ||
+        (GetKeyState(VK_RMENU) & 0x8000) != 0;
+    return (key == VK_OEM_PERIOD || key == VK_SPACE) && ctrl && !shift && !alt;
+}
+
+bool TextService::ExitInputMethodKey(WPARAM key) const
+{
+    return key == VK_SPACE &&
+           ((GetKeyState(VK_CONTROL) & 0x8000) != 0 ||
+            (GetKeyState(VK_LCONTROL) & 0x8000) != 0 ||
+            (GetKeyState(VK_RCONTROL) & 0x8000) != 0) &&
+           (GetKeyState(VK_SHIFT) & 0x8000) != 0 &&
+           (GetKeyState(VK_MENU) & 0x8000) == 0 &&
+           (GetKeyState(VK_LMENU) & 0x8000) == 0 &&
+           (GetKeyState(VK_RMENU) & 0x8000) == 0;
 }
 
 bool TextService::ToggleFullShapeKey(WPARAM key) const
@@ -1098,7 +1276,7 @@ bool TextService::ToggleFullShapeKey(WPARAM key) const
     if (key == VK_SPACE) {
         return shift_down_ || shift_pending_toggle_ || (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     }
-    if (ToggleInputModeKey(key)) {
+    if (ShiftKey(key)) {
         return space_down_ || (GetKeyState(VK_SPACE) & 0x8000) != 0;
     }
     return false;
