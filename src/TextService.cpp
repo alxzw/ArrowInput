@@ -129,6 +129,9 @@ TextService::TextService()
       config_reload_pending_(false),
       config_write_time_({}),
       composition_range_(nullptr),
+      preedit_anchor_range_(nullptr),
+      tsf_composition_(nullptr),
+      preedit_text_length_(0),
       active_context_(nullptr)
 {
     AddRefServer();
@@ -158,6 +161,8 @@ HRESULT TextService::QueryInterface(REFIID iid, void** result)
         *result = static_cast<ITfKeyEventSink*>(this);
     } else if (IsEqualIID(iid, IID_ITfThreadFocusSink)) {
         *result = static_cast<ITfThreadFocusSink*>(this);
+    } else if (IsEqualIID(iid, IID_ITfCompositionSink)) {
+        *result = static_cast<ITfCompositionSink*>(this);
     } else if (IsEqualIID(iid, IID_ITfDisplayAttributeProvider)) {
         *result = static_cast<ITfDisplayAttributeProvider*>(this);
     } else {
@@ -383,9 +388,13 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM, BOOL*
                 context,
                 &engine_,
                 &composition_range_,
+                &preedit_anchor_range_,
+                &tsf_composition_,
+                static_cast<ITfCompositionSink*>(this),
                 &candidate_window_,
                 punctuation,
-                true);
+                true,
+                &preedit_text_length_);
             if (!session) {
                 return E_OUTOFMEMORY;
             }
@@ -422,7 +431,7 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM, BOOL*
                 }
             }
 
-            auto* session = new (std::nothrow) KeyEditSession(context, &composition_range_, &candidate_window_, punctuation);
+            auto* session = new (std::nothrow) KeyEditSession(context, &composition_range_, &preedit_anchor_range_, &tsf_composition_, static_cast<ITfCompositionSink*>(this), &candidate_window_, punctuation, &preedit_text_length_);
             if (!session) {
                 return E_OUTOFMEMORY;
             }
@@ -460,7 +469,7 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM, BOOL*
                 }
             }
 
-            auto* session = new (std::nothrow) KeyEditSession(context, &composition_range_, &candidate_window_, full_shape_text);
+            auto* session = new (std::nothrow) KeyEditSession(context, &composition_range_, &preedit_anchor_range_, &tsf_composition_, static_cast<ITfCompositionSink*>(this), &candidate_window_, full_shape_text, &preedit_text_length_);
             if (!session) {
                 return E_OUTOFMEMORY;
             }
@@ -496,7 +505,7 @@ HRESULT TextService::OnKeyDown(ITfContext* context, WPARAM wparam, LPARAM, BOOL*
                 active_context_->AddRef();
             }
         }
-        auto* session = new (std::nothrow) KeyEditSession(context, &engine_, &composition_range_, &candidate_window_, static_cast<UINT>(wparam));
+        auto* session = new (std::nothrow) KeyEditSession(context, &engine_, &composition_range_, &preedit_anchor_range_, &tsf_composition_, static_cast<ITfCompositionSink*>(this), &candidate_window_, static_cast<UINT>(wparam), &preedit_text_length_);
         if (!session) {
             return E_OUTOFMEMORY;
         }
@@ -548,7 +557,7 @@ void TextService::CommitCandidateFromWindow(size_t index)
         return;
     }
 
-    auto* session = new (std::nothrow) KeyEditSession(active_context_, &engine_, &composition_range_, &candidate_window_, index);
+    auto* session = new (std::nothrow) KeyEditSession(active_context_, &engine_, &composition_range_, &preedit_anchor_range_, &tsf_composition_, static_cast<ITfCompositionSink*>(this), &candidate_window_, index, &preedit_text_length_);
     if (!session) {
         return;
     }
@@ -574,9 +583,13 @@ void TextService::HighlightCandidateFromWindow(size_t index)
         active_context_,
         &engine_,
         &composition_range_,
+        &preedit_anchor_range_,
+        &tsf_composition_,
+        static_cast<ITfCompositionSink*>(this),
         &candidate_window_,
         index,
-        true);
+        true,
+        &preedit_text_length_);
     if (!session) {
         return;
     }
@@ -602,8 +615,12 @@ void TextService::PageCandidateFromWindow(bool next_page)
         active_context_,
         &engine_,
         &composition_range_,
+        &preedit_anchor_range_,
+        &tsf_composition_,
+        static_cast<ITfCompositionSink*>(this),
         &candidate_window_,
-        static_cast<UINT>(next_page ? VK_NEXT : VK_PRIOR));
+        static_cast<UINT>(next_page ? VK_NEXT : VK_PRIOR),
+        &preedit_text_length_);
     if (!session) {
         return;
     }
@@ -626,7 +643,7 @@ void TextService::CancelComposition(ITfContext* context, const wchar_t* success_
     }
 
     auto* session =
-        new (std::nothrow) KeyEditSession(context, &engine_, &composition_range_, &candidate_window_, static_cast<UINT>(VK_ESCAPE));
+        new (std::nothrow) KeyEditSession(context, &engine_, &composition_range_, &preedit_anchor_range_, &tsf_composition_, static_cast<ITfCompositionSink*>(this), &candidate_window_, static_cast<UINT>(VK_ESCAPE), &preedit_text_length_);
     if (!session) {
         return;
     }
@@ -882,6 +899,21 @@ HRESULT TextService::OnKillThreadFocus()
     return S_OK;
 }
 
+HRESULT TextService::OnCompositionTerminated(TfEditCookie, ITfComposition* composition)
+{
+    if (tsf_composition_ && (!composition || composition == tsf_composition_)) {
+        tsf_composition_->Release();
+        tsf_composition_ = nullptr;
+    }
+    ClearCompositionRange();
+    if (engine_.HasComposition()) {
+        engine_.Reset(config_);
+    }
+    candidate_window_.Hide();
+    DebugLog(L"preedit composition terminated");
+    return S_OK;
+}
+
 HRESULT TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL* eaten)
 {
     if (!eaten) {
@@ -1125,6 +1157,15 @@ void TextService::ClearCompositionRange()
         composition_range_->Release();
         composition_range_ = nullptr;
     }
+    if (preedit_anchor_range_) {
+        preedit_anchor_range_->Release();
+        preedit_anchor_range_ = nullptr;
+    }
+    if (tsf_composition_) {
+        tsf_composition_->Release();
+        tsf_composition_ = nullptr;
+    }
+    preedit_text_length_ = 0;
 }
 
 void TextService::RequestFocusCleanupEditSession(ITfContext* context, ITfRange* range)

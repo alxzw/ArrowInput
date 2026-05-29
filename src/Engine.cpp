@@ -26,13 +26,7 @@ DictionaryStats Engine::GetDictionaryStats() const
 
 std::wstring Engine::FormatCompositionForDisplay() const
 {
-    if (composition_.empty()) {
-        return L"";
-    }
-    if (!config_.preedit_markers) {
-        return composition_;
-    }
-    return L"[" + composition_ + L"]";
+    return composition_;
 }
 
 std::wstring Engine::CommitCandidate(size_t index)

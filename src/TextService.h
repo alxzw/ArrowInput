@@ -12,6 +12,7 @@ class TextService final
     : public ITfTextInputProcessorEx,
       public ITfKeyEventSink,
       public ITfThreadFocusSink,
+      public ITfCompositionSink,
       public ITfDisplayAttributeProvider {
 public:
     TextService();
@@ -32,6 +33,7 @@ public:
     IFACEMETHODIMP OnKeyUp(ITfContext* context, WPARAM wparam, LPARAM lparam, BOOL* eaten) override;
     IFACEMETHODIMP OnSetThreadFocus() override;
     IFACEMETHODIMP OnKillThreadFocus() override;
+    IFACEMETHODIMP OnCompositionTerminated(TfEditCookie edit_cookie, ITfComposition* composition) override;
     IFACEMETHODIMP OnPreservedKey(ITfContext* context, REFGUID guid, BOOL* eaten) override;
     IFACEMETHODIMP EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** enum_info) override;
     IFACEMETHODIMP GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** info) override;
@@ -90,6 +92,9 @@ private:
     bool config_reload_pending_;
     FILETIME config_write_time_;
     ITfRange* composition_range_;
+    ITfRange* preedit_anchor_range_;
+    ITfComposition* tsf_composition_;
+    size_t preedit_text_length_;
     ITfContext* active_context_;
     CandidateWindow candidate_window_;
     StatusWindow status_window_;
